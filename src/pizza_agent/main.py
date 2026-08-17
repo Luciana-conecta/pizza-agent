@@ -30,17 +30,30 @@ from .tools.order_tools import (
 from .tools.tracking_tool import OrderTrackingTool
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL = "meta/llama-3.1-8b-instruct"
+# Los agentes con herramientas necesitan un modelo que soporte bien tool-calling;
+# el 8b lo hace mal (contesta con texto genérico en vez de llamar a la herramienta).
+NVIDIA_AGENT_MODEL = "meta/llama-3.1-70b-instruct"
+# El clasificador solo genera un JSON estructurado (sin tools), así que un modelo
+# chico y rápido alcanza. Usarlo acá reduce la carga sobre el modelo grande.
+NVIDIA_CLASSIFIER_MODEL = "meta/llama-3.1-8b-instruct"
 
 
-def nvidia_llm() -> LLM:
+def _nvidia_llm(model: str) -> LLM:
     return LLM(
-        model=NVIDIA_MODEL,
+        model=model,
         base_url=NVIDIA_BASE_URL,
         api_key=os.getenv("NVIDIA_API_KEY"),
         custom_openai=True,
         timeout=30,
     )
+
+
+def nvidia_llm() -> LLM:
+    return _nvidia_llm(NVIDIA_AGENT_MODEL)
+
+
+def nvidia_classifier_llm() -> LLM:
+    return _nvidia_llm(NVIDIA_CLASSIFIER_MODEL)
 
 
 CONFIDENCE_THRESHOLD = 0.6
@@ -132,7 +145,7 @@ class PizzaAgentFlow(Flow[RouterState]):
 
         print(f"Classifying request: {self.state.request}")
 
-        llm = nvidia_llm()
+        llm = nvidia_classifier_llm()
         prompt = build_classifier_prompt(self.state.request, self.state.is_owner)
         classification = llm.call(
             messages=[{"role": "user", "content": prompt}],
