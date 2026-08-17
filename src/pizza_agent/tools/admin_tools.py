@@ -91,3 +91,28 @@ class ObtenerClientesFrecuentesTool(BaseTool):
         if not result.success:
             return result.error
         return formatters.format_frequent_customers(result.data, ordenar_por)
+
+
+class PedidosPorEstadoInput(BaseModel):
+    estado: Literal["pendiente", "en_preparacion", "en_camino", "entregado", "cancelado"] = Field(
+        default="pendiente",
+        description="Estado de pedido a listar, de todos los clientes (ej. 'pendiente' para pedidos pendientes).",
+    )
+
+
+class ObtenerPedidosPorEstadoTool(BaseTool):
+    name: str = "obtener_pedidos_por_estado"
+    description: str = (
+        "Lista todos los pedidos (de cualquier cliente) que están en un estado dado, "
+        "ej. 'pedidos pendientes', 'pedidos en camino'. Los más viejos primero."
+    )
+    args_schema: Type[BaseModel] = PedidosPorEstadoInput
+    is_owner: bool = False
+
+    def _run(self, estado: str = "pendiente") -> str:
+        if not self.is_owner:
+            return _NO_AUTORIZADO
+        result = db.obtener_pedidos_por_estado(estado)
+        if not result.success:
+            return result.error
+        return formatters.format_orders_by_status(result.data, estado)

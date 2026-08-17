@@ -336,3 +336,21 @@ def obtener_clientes_frecuentes(limite: int = 10, ordenar_por: str = "pedidos") 
             (limite,),
         ).fetchall()
     return ok(rows)
+
+
+def obtener_pedidos_por_estado(estado: str) -> Result:
+    if estado not in config.ESTADOS_PEDIDO_VALIDOS:
+        validos = ", ".join(sorted(config.ESTADOS_PEDIDO_VALIDOS))
+        return fail(f"Estado inválido: '{estado}'. Válidos: {validos}.")
+    with get_pool().connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.id, p.fecha, p.total, c.nombre AS cliente_nombre, c.telefono
+            FROM pedidos p
+            JOIN clientes c ON c.id = p.cliente_id
+            WHERE p.estado = %s
+            ORDER BY p.fecha ASC
+            """,
+            (estado,),
+        ).fetchall()
+    return ok(rows)

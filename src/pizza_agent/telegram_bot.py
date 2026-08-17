@@ -37,8 +37,24 @@ SESSION_EXPIRY_CHECK_SECONDS = 600
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "¡Hola! Soy el asistente de la pizzería. Preguntame por el menú, los horarios, "
-        "hacé tu pedido, o consultá el estado de uno que ya hiciste."
+        "hacé tu pedido, o consultá el estado de uno que ya hiciste. Si querés reiniciar un "
+        "pedido a medias, escribí /cancelar."
     )
+
+
+async def cmd_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.effective_chat.id)
+    async with session_store.get_lock(chat_id):
+        draft = session_store.get(chat_id)
+        if draft is None:
+            await update.message.reply_text("No tenías ningún pedido en curso.")
+            return
+        try:
+            draft.transition_to("cancelled")
+        except ValueError:
+            pass
+        session_store.delete(chat_id)
+        await update.message.reply_text("Listo, cancelé tu pedido en curso. Podés empezar de nuevo cuando quieras.")
 
 
 async def cmd_estado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -167,6 +183,7 @@ def main() -> None:
     app = Application.builder().token(token).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("cancelar", cmd_cancelar))
     app.add_handler(CommandHandler("estado", cmd_estado))
     app.add_handler(CallbackQueryHandler(on_confirm_or_cancel))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))

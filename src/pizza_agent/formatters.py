@@ -50,6 +50,16 @@ def format_frequent_customers(clientes: list[dict], ordenar_por: str) -> str:
     )
 
 
+def format_orders_by_status(pedidos: list[dict], estado: str) -> str:
+    if not pedidos:
+        return f"No hay pedidos en estado '{estado}'."
+    lineas = [
+        f"#{p['id']} — {p['cliente_nombre']} ({p['telefono']}) — {p['fecha']} — Gs. {p['total']}"
+        for p in pedidos
+    ]
+    return f"Pedidos en estado '{estado}' ({len(pedidos)}):\n" + "\n".join(lineas)
+
+
 def format_order_status(pedido: dict) -> str:
     return (
         f"Pedido #{pedido['id']} — estado: {pedido['estado']}\n"

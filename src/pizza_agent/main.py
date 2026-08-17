@@ -14,6 +14,7 @@ from .session_store import session_store
 from .tools.admin_tools import (
     ObtenerClientesFrecuentesTool,
     ObtenerHistorialPedidosTool,
+    ObtenerPedidosPorEstadoTool,
     ObtenerResumenClienteTool,
     ObtenerUltimoPedidoTool,
 )
@@ -41,7 +42,11 @@ def _nvidia_llm(model: str) -> LLM:
         base_url=NVIDIA_BASE_URL,
         api_key=os.getenv("NVIDIA_API_KEY"),
         custom_openai=True,
-        timeout=30,
+        # NVIDIA a veces deja un request colgado sin responder (no es un error, es
+        # silencio). El cliente OpenAI reintenta solo, pero espera el timeout entero
+        # antes de reintentar — con 30s cada colgue costaba ~30s. Las llamadas que sí
+        # responden lo hacen en 2-10s, así que 15s da margen sin esperar de más.
+        timeout=15,
     )
 
 
@@ -232,6 +237,7 @@ class PizzaAgentFlow(Flow[RouterState]):
     def _order_agent(self) -> Agent:
         tools = [
             MenuLookupTool(),
+            InfoLookupTool(),
             AddItemToDraftTool(chat_id=self.state.chat_id, session_store=session_store),
             RemoveItemFromDraftTool(chat_id=self.state.chat_id, session_store=session_store),
             ViewDraftTool(chat_id=self.state.chat_id, session_store=session_store),
@@ -247,7 +253,11 @@ class PizzaAgentFlow(Flow[RouterState]):
                 "Trabajás en una pizzería. Sos amable y directo. Nunca inventás productos ni "
                 "precios: siempre los buscás con las herramientas. Solo marcás el pedido como "
                 "listo para confirmar cuando ya hay al menos un producto y los datos de "
-                "contacto y entrega del cliente." + COMMON_AGENT_RULES
+                "contacto y entrega del cliente. Si te preguntan qué productos/pizzas hay, "
+                "precios, u horarios/dirección — aunque ya haya un pedido en curso — llamá "
+                "primero a la herramienta correspondiente (consultar_menu o "
+                "consultar_info_local) y recién ahí respondé con esos datos reales. Nunca "
+                "respondas una lista de opciones sin haber llamado a la herramienta antes." + COMMON_AGENT_RULES
             ),
             llm=nvidia_llm(),
             tools=tools,
@@ -268,6 +278,7 @@ class PizzaAgentFlow(Flow[RouterState]):
             ObtenerUltimoPedidoTool(is_owner=self.state.is_owner),
             ObtenerHistorialPedidosTool(is_owner=self.state.is_owner),
             ObtenerClientesFrecuentesTool(is_owner=self.state.is_owner),
+            ObtenerPedidosPorEstadoTool(is_owner=self.state.is_owner),
         ]
         return Agent(
             role="Agente Administrativo",
