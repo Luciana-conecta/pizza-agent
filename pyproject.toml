@@ -1,0 +1,26 @@
+[project]
+name = "pizza_agent"
+version = "0.1.0"
+description = "pizza_agent using crewAI"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[tools]>=1.15.16,<2.0.0",
+    "psycopg[binary,pool]>=3.2",
+    "python-telegram-bot[job-queue]>=21.0",
+    "python-dotenv>=1.0",
+    "requests>=2.31"
+]
+
+[project.scripts]
+kickoff = "pizza_agent.main:kickoff"
+run_crew = "pizza_agent.main:kickoff"
+plot = "pizza_agent.main:plot"
+bot = "pizza_agent.telegram_bot:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "flow"

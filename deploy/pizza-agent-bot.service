@@ -1,0 +1,15 @@
+[Unit]
+Description=Pizza Agent Telegram Bot
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=CAMBIAR_POR_TU_USUARIO
+WorkingDirectory=/opt/pizza_agent
+EnvironmentFile=/opt/pizza_agent/.env
+ExecStart=/opt/pizza_agent/.venv/bin/python -m pizza_agent.telegram_bot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
