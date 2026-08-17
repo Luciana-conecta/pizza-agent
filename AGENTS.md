@@ -5,6 +5,10 @@
 > Keep it in your project root. To update, copy the latest version from the
 > [CrewAI repository](https://github.com/crewAIInc/crewAI).
 
+> **Agregado manual (no borrar en un refresh de este archivo):** antes de trabajar en este
+> proyecto, leé también `MEMORY.md` (decisiones y correcciones de sesiones anteriores) y
+> `CLAUDE.md` (instrucciones específicas de este repo).
+
 ---
 
 ## ⚠️ Version & Freshness Requirements

@@ -74,10 +74,10 @@ COMMON_AGENT_RULES = (
     " Reglas importantes: (1) Si usás una herramienta, tu respuesta final SIEMPRE tiene que "
     "incluir los datos concretos que te devolvió esa herramienta (nombres, precios, montos, "
     "estados, etc.) — nunca digas que 'ahí va la información' sin ponerla de verdad. "
-    "(2) Si el mensaje es un saludo o charla casual sin un pedido concreto, respondé de forma "
-    "natural, corta y amable, sin necesidad de usar ninguna herramienta. Nunca respondas algo "
-    "como 'no hay una función que responda a este mensaje' — siempre podés al menos saludar y "
-    "preguntar en qué ayudar."
+    "(2) Si el mensaje es un saludo o charla casual sin un pedido concreto (ej. 'hola', 'buenas'), "
+    "no uses ninguna herramienta: respondé directo con un saludo corto y amable que invite a "
+    "pedir, por ejemplo: '¡Hola! ¿En qué puedo ayudarte hoy?' o '¡Hola! Contame qué te gustaría "
+    "pedir.'"
 )
 
 ADMIN_CATEGORY_TEXT = """
