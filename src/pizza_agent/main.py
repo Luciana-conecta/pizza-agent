@@ -30,7 +30,7 @@ from .tools.order_tools import (
 from .tools.tracking_tool import OrderTrackingTool
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL = "meta/llama-3.1-70b-instruct"
+NVIDIA_MODEL = "meta/llama-3.1-8b-instruct"
 
 
 def nvidia_llm() -> LLM:
@@ -59,6 +59,16 @@ Marcá can_automate=True solo si un agente automático puede resolver esto sin q
 tenga que revisar el resultado después. Escalá (can_automate=False) cualquier enojo o queja
 seria, pedidos de reembolso, o cualquier cosa de la que no estés seguro.
 """
+
+COMMON_AGENT_RULES = (
+    " Reglas importantes: (1) Si usás una herramienta, tu respuesta final SIEMPRE tiene que "
+    "incluir los datos concretos que te devolvió esa herramienta (nombres, precios, montos, "
+    "estados, etc.) — nunca digas que 'ahí va la información' sin ponerla de verdad. "
+    "(2) Si el mensaje es un saludo o charla casual sin un pedido concreto, respondé de forma "
+    "natural, corta y amable, sin necesidad de usar ninguna herramienta. Nunca respondas algo "
+    "como 'no hay una función que responda a este mensaje' — siempre podés al menos saludar y "
+    "preguntar en qué ayudar."
+)
 
 ADMIN_CATEGORY_TEXT = """
 - admin_query: La dueña de la pizzería pregunta algo sobre clientes o ventas (ej. "cuánto
@@ -200,7 +210,8 @@ class PizzaAgentFlow(Flow[RouterState]):
         return Agent(
             role="Agente de Preguntas Frecuentes",
             goal="Responder preguntas sobre el menú, precios, horarios, ubicación y delivery.",
-            backstory="Conocés el menú y la información del local al detalle y nunca inventás datos.",
+            backstory="Conocés el menú y la información del local al detalle y nunca inventás datos."
+            + COMMON_AGENT_RULES,
             llm=nvidia_llm(),
             tools=[MenuLookupTool(), InfoLookupTool()],
         )
@@ -223,7 +234,7 @@ class PizzaAgentFlow(Flow[RouterState]):
                 "Trabajás en una pizzería. Sos amable y directo. Nunca inventás productos ni "
                 "precios: siempre los buscás con las herramientas. Solo marcás el pedido como "
                 "listo para confirmar cuando ya hay al menos un producto y los datos de "
-                "contacto y entrega del cliente."
+                "contacto y entrega del cliente." + COMMON_AGENT_RULES
             ),
             llm=nvidia_llm(),
             tools=tools,
@@ -233,7 +244,7 @@ class PizzaAgentFlow(Flow[RouterState]):
         return Agent(
             role="Agente de Seguimiento de Pedidos",
             goal="Informar el estado de los pedidos del cliente que escribe.",
-            backstory="Consultás siempre la herramienta de rastreo, nunca inventás un estado.",
+            backstory="Consultás siempre la herramienta de rastreo, nunca inventás un estado." + COMMON_AGENT_RULES,
             llm=nvidia_llm(),
             tools=[OrderTrackingTool(chat_id=self.state.chat_id)],
         )
@@ -251,7 +262,8 @@ class PizzaAgentFlow(Flow[RouterState]):
         return Agent(
             role="Agente Administrativo",
             goal="Responder preguntas de la dueña sobre clientes y ventas usando las herramientas de consulta.",
-            backstory="Tenés acceso de solo lectura a los datos de clientes y pedidos para reportarle a la dueña.",
+            backstory="Tenés acceso de solo lectura a los datos de clientes y pedidos para reportarle a la dueña."
+            + COMMON_AGENT_RULES,
             llm=nvidia_llm(),
             tools=tools,
         )
