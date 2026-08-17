@@ -26,19 +26,41 @@ class OrderItem(BaseModel):
     precio_unitario: int
 
 
+# Transiciones válidas de `OrderDraft.status`. "submitted"/"cancelled" son pasos
+# terminales que se atraviesan justo antes de que telegram_bot.py borre el draft
+# de la sesión (el pedido en sí ya vive en Postgres) — existen como paso explícito
+# para que la transición quede auditable en vez de borrar directo.
+_TRANSICIONES_VALIDAS: dict[str, set[str]] = {
+    "building": {"building", "awaiting_confirmation", "cancelled"},
+    "awaiting_confirmation": {"building", "submitted", "cancelled"},
+    "submitted": set(),
+    "cancelled": set(),
+}
+
+
 class OrderDraft(BaseModel):
     chat_id: str
     items: list[OrderItem] = Field(default_factory=list)
     cliente_nombre: str = ""
     telefono: str = ""
     direccion: str = ""
-    status: Literal["building", "awaiting_confirmation", "submitted"] = "building"
+    status: Literal["building", "awaiting_confirmation", "submitted", "cancelled"] = "building"
     last_bot_message: str = ""
     updated_at: float = 0.0
 
     @property
     def total(self) -> int:
         return sum(item.cantidad * item.precio_unitario for item in self.items)
+
+    def transition_to(self, nuevo_estado: str) -> None:
+        """Aplica una transición de estado, o lanza ValueError si no es válida.
+
+        Centraliza acá las transiciones para que ningún lugar del código
+        (tools, Flow, bot de Telegram) decida el estado de un pedido a mano.
+        """
+        if nuevo_estado != self.status and nuevo_estado not in _TRANSICIONES_VALIDAS.get(self.status, set()):
+            raise ValueError(f"Transición inválida: {self.status} -> {nuevo_estado}")
+        self.status = nuevo_estado
 
 
 class SessionStore:

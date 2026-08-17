@@ -24,7 +24,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import db
+from . import db, formatters, order_validation
 from .main import PizzaAgentFlow
 from .session_store import session_store
 
@@ -56,11 +56,11 @@ async def cmd_estado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("El pedido_id debe ser un número.")
         return
 
-    ok = await asyncio.to_thread(db.actualizar_estado_pedido, int(pedido_id_str), nuevo_estado)
-    if ok:
+    result = await asyncio.to_thread(db.actualizar_estado_pedido, int(pedido_id_str), nuevo_estado)
+    if result.success:
         await update.message.reply_text(f"Pedido #{pedido_id_str} actualizado a '{nuevo_estado}'.")
     else:
-        await update.message.reply_text(f"No encontré el pedido #{pedido_id_str}.")
+        await update.message.reply_text(result.error)
 
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -114,27 +114,27 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         if action == "cancel":
+            draft.transition_to("cancelled")
             session_store.delete(chat_id)
             await query.edit_message_text("Pedido cancelado.")
             return
 
-        if not draft.telefono or not draft.direccion:
-            draft.status = "building"
+        ok, errores = order_validation.validar_draft_para_confirmar(draft)
+        if not ok:
+            draft.transition_to("building")
             session_store.save(draft)
-            await query.edit_message_text(
-                "Todavía faltan tus datos de contacto/entrega. Escribime tu teléfono y dirección."
-            )
+            await query.edit_message_text("Antes de confirmar, corregí esto:\n- " + "\n- ".join(errores))
             return
 
         try:
-            cliente_id = await asyncio.to_thread(
+            cliente_resultado = await asyncio.to_thread(
                 db.find_or_create_cliente, chat_id, draft.cliente_nombre, draft.telefono, draft.direccion
             )
             items = [
                 {"producto_id": it.producto_id, "cantidad": it.cantidad, "precio_unitario": it.precio_unitario}
                 for it in draft.items
             ]
-            pedido_id = await asyncio.to_thread(db.crear_pedido, cliente_id, items)
+            pedido_resultado = await asyncio.to_thread(db.crear_pedido, cliente_resultado.data, items)
         except Exception:
             logger.exception("Error al confirmar el pedido del chat %s", chat_id)
             await query.edit_message_text(
@@ -142,10 +142,16 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
 
-        resumen = "\n".join(f"- {it.cantidad}x {it.nombre}" for it in draft.items)
-        total = draft.total
+        if not pedido_resultado.success:
+            draft.transition_to("building")
+            session_store.save(draft)
+            await query.edit_message_text(pedido_resultado.error)
+            return
+
+        draft.transition_to("submitted")
+        mensaje = formatters.format_order_confirmation(pedido_resultado.data["pedido_id"], draft)
         session_store.delete(chat_id)
-        await query.edit_message_text(f"¡Pedido #{pedido_id} confirmado!\n{resumen}\nTotal: Gs. {total}")
+        await query.edit_message_text(mensaje)
 
 
 async def expire_stale_sessions(context: ContextTypes.DEFAULT_TYPE) -> None:

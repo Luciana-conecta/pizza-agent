@@ -10,3 +10,6 @@ DIRECCION = "Cambiar por la dirección real del local"
 ZONA_DELIVERY = "Cambiar por las zonas donde hacen delivery"
 COSTO_DELIVERY = "Cambiar por el costo de envío"
 TELEFONO_LOCAL = "Cambiar por el teléfono del local"
+
+# Valores válidos de `pedidos.estado` (usado por `/estado` en telegram_bot.py).
+ESTADOS_PEDIDO_VALIDOS = {"pendiente", "en_preparacion", "en_camino", "entregado", "cancelado"}

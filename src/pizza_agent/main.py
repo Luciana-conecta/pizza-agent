@@ -12,13 +12,10 @@ from crewai.flow import Flow, listen, router, start
 
 from .session_store import session_store
 from .tools.admin_tools import (
-    ConsultarClienteQueMasCompraTool,
-    ConsultarClienteTool,
-    ConsultarClientePorNombreTool,
-    ConsultarClientesFrecuentesTool,
-    ConsultarPedidoClienteTool,
-    ConsultarTotalClienteTool,
-    ConsultarUltimoPedidoTool,
+    ObtenerClientesFrecuentesTool,
+    ObtenerHistorialPedidosTool,
+    ObtenerResumenClienteTool,
+    ObtenerUltimoPedidoTool,
 )
 from .tools.menu_tool import InfoLookupTool, MenuLookupTool
 from .tools.order_tools import (
@@ -216,8 +213,11 @@ class PizzaAgentFlow(Flow[RouterState]):
 
         draft = session_store.get(self.state.chat_id)
         if output.ready_to_confirm and draft is not None and draft.items:
-            draft.status = "awaiting_confirmation"
-            session_store.save(draft)
+            try:
+                draft.transition_to("awaiting_confirmation")
+                session_store.save(draft)
+            except ValueError as exc:
+                print(f"Transición de estado rechazada para chat {self.state.chat_id}: {exc}")
 
     def _faq_agent(self) -> Agent:
         return Agent(
@@ -264,13 +264,10 @@ class PizzaAgentFlow(Flow[RouterState]):
 
     def _admin_agent(self) -> Agent:
         tools = [
-            ConsultarClienteTool(is_owner=self.state.is_owner),
-            ConsultarClientePorNombreTool(is_owner=self.state.is_owner),
-            ConsultarTotalClienteTool(is_owner=self.state.is_owner),
-            ConsultarUltimoPedidoTool(is_owner=self.state.is_owner),
-            ConsultarPedidoClienteTool(is_owner=self.state.is_owner),
-            ConsultarClientesFrecuentesTool(is_owner=self.state.is_owner),
-            ConsultarClienteQueMasCompraTool(is_owner=self.state.is_owner),
+            ObtenerResumenClienteTool(is_owner=self.state.is_owner),
+            ObtenerUltimoPedidoTool(is_owner=self.state.is_owner),
+            ObtenerHistorialPedidosTool(is_owner=self.state.is_owner),
+            ObtenerClientesFrecuentesTool(is_owner=self.state.is_owner),
         ]
         return Agent(
             role="Agente Administrativo",

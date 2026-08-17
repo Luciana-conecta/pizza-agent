@@ -3,7 +3,7 @@ from typing import Any, Type
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from .. import db
+from .. import db, formatters
 from ..session_store import OrderItem
 
 # chat_id y session_store se fijan en el constructor (no son argumentos del LLM),
@@ -28,9 +28,10 @@ class AddItemToDraftTool(BaseTool):
     session_store: Any
 
     def _run(self, producto_nombre: str, cantidad: int = 1) -> str:
-        producto = db.find_producto(producto_nombre)
-        if producto is None:
-            return f"No encontré '{producto_nombre}' en el menú. Pedile al cliente que aclare o consultá el menú."
+        result = db.find_producto(producto_nombre)
+        if not result.success:
+            return result.error
+        producto = result.data
         draft = self.session_store.get_or_create(self.chat_id)
         draft.items.append(
             OrderItem(
@@ -40,7 +41,10 @@ class AddItemToDraftTool(BaseTool):
                 precio_unitario=producto["precio"],
             )
         )
-        draft.status = "building"
+        try:
+            draft.transition_to("building")
+        except ValueError as exc:
+            print(f"Transición de estado rechazada para chat {self.chat_id}: {exc}")
         self.session_store.save(draft)
         return f"Agregado: {cantidad}x {producto['nombre']} (Gs. {producto['precio']} c/u). Total parcial: Gs. {draft.total}"
 
@@ -79,16 +83,7 @@ class ViewDraftTool(BaseTool):
 
     def _run(self) -> str:
         draft = self.session_store.get_or_create(self.chat_id)
-        if not draft.items:
-            return "Todavía no hay productos en el pedido."
-        items = "\n".join(f"- {it.cantidad}x {it.nombre} (Gs. {it.precio_unitario} c/u)" for it in draft.items)
-        return (
-            f"{items}\n"
-            f"Total: Gs. {draft.total}\n"
-            f"Cliente: {draft.cliente_nombre or '(sin definir)'}\n"
-            f"Teléfono: {draft.telefono or '(sin definir)'}\n"
-            f"Dirección: {draft.direccion or '(sin definir)'}"
-        )
+        return formatters.format_draft_view(draft)
 
 
 class SetCustomerInfoInput(BaseModel):

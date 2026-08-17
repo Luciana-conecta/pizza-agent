@@ -3,7 +3,7 @@ from typing import Type
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from .. import config, db
+from .. import config, db, formatters
 
 
 class MenuLookupInput(BaseModel):
@@ -23,16 +23,11 @@ class MenuLookupTool(BaseTool):
     args_schema: Type[BaseModel] = MenuLookupInput
 
     def _run(self, categoria: str = "") -> str:
-        productos = db.get_menu()
+        result = db.get_menu()
+        productos = result.data
         if categoria:
             productos = [p for p in productos if categoria.lower() in p["categoria"].lower()]
-        if not productos:
-            return "No hay productos disponibles en esa categoría."
-        lineas = [
-            f"- {p['nombre']} ({p['categoria']}): {p['descripcion'] or 'sin descripción'} — Gs. {p['precio']}"
-            for p in productos
-        ]
-        return "\n".join(lineas)
+        return formatters.format_menu(productos)
 
 
 class InfoLookupInput(BaseModel):

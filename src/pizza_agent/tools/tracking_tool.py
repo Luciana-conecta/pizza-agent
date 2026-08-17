@@ -3,7 +3,7 @@ from typing import Type
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from .. import db
+from .. import db, formatters
 
 
 class OrderTrackingInput(BaseModel):
@@ -23,13 +23,7 @@ class OrderTrackingTool(BaseTool):
     chat_id: str
 
     def _run(self, pedido_id: int = 0) -> str:
-        pedido = db.track_pedido(self.chat_id, pedido_id or None)
-        if pedido is None:
-            return "No encontré ningún pedido tuyo con esos datos."
-        items = ", ".join(f"{it['cantidad']}x {it['nombre']}" for it in pedido["items"])
-        return (
-            f"Pedido #{pedido['id']} — estado: {pedido['estado']}\n"
-            f"Fecha: {pedido['fecha']}\n"
-            f"Items: {items}\n"
-            f"Total: Gs. {pedido['total']}"
-        )
+        result = db.track_pedido(self.chat_id, pedido_id or None)
+        if not result.success:
+            return result.error
+        return formatters.format_order_status(result.data)
