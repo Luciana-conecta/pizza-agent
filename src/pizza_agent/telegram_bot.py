@@ -24,13 +24,12 @@ from telegram.ext import (
     filters,
 )
 
-from . import db, formatters, order_validation
+from . import authorization, db, formatters, order_validation
 from .main import PizzaAgentFlow
 from .session_store import session_store
 
 logger = logging.getLogger(__name__)
 
-OWNER_TELEGRAM_CHAT_ID = os.getenv("OWNER_TELEGRAM_CHAT_ID")
 SESSION_EXPIRY_CHECK_SECONDS = 600
 
 
@@ -59,7 +58,7 @@ async def cmd_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def cmd_estado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.effective_chat.id)
-    if chat_id != OWNER_TELEGRAM_CHAT_ID:
+    if not authorization.is_owner(chat_id):
         await update.message.reply_text("No autorizado.")
         return
 
@@ -81,7 +80,7 @@ async def cmd_estado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.effective_chat.id)
-    is_owner = chat_id == OWNER_TELEGRAM_CHAT_ID
+    is_owner = authorization.is_owner(chat_id)
     text = update.message.text
 
     async with session_store.get_lock(chat_id):

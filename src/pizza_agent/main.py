@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from crewai import LLM, Agent
 from crewai.flow import Flow, listen, router, start
 
+from . import authorization
 from .session_store import session_store
 from .tools.admin_tools import (
     ObtenerClientesFrecuentesTool,
@@ -136,15 +137,25 @@ class PizzaAgentFlow(Flow[RouterState]):
 
     @start()
     def classify_intent(self):
-        draft = session_store.get(self.state.chat_id) if self.state.chat_id else None
-        if draft is not None and draft.status in ("building", "awaiting_confirmation"):
-            self.state.intent = "take_order"
-            self.state.can_automate = True
-            self.state.confidence = 1.0
-            self.state.reasoning = "Ya hay un pedido en construcción para este chat."
-            print(f"Ruteo pegajoso a take_order para chat {self.state.chat_id}")
+        if self._resolve_sticky_intent():
             return
+        self._classify_intent_with_llm()
 
+    def _resolve_sticky_intent(self) -> bool:
+        """Decisión de sesión: si ya hay un pedido en construcción, no reclasifica."""
+        draft = session_store.get(self.state.chat_id) if self.state.chat_id else None
+        if draft is None or draft.status not in ("building", "awaiting_confirmation"):
+            return False
+
+        self.state.intent = "take_order"
+        self.state.can_automate = True
+        self.state.confidence = 1.0
+        self.state.reasoning = "Ya hay un pedido en construcción para este chat."
+        print(f"Ruteo pegajoso a take_order para chat {self.state.chat_id}")
+        return True
+
+    def _classify_intent_with_llm(self):
+        """Decisión de intención: delega en el LLM clasificador."""
         print(f"Classifying request: {self.state.request}")
 
         llm = nvidia_classifier_llm()
@@ -310,7 +321,7 @@ class PizzaAgentFlow(Flow[RouterState]):
         print(f"Queued for human review: {queue_file}")
 
     def _notify_owner_telegram(self, text: str) -> None:
-        owner_chat_id = os.getenv("OWNER_TELEGRAM_CHAT_ID")
+        owner_chat_id = authorization.owner_chat_id()
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not owner_chat_id or not token:
             print("OWNER_TELEGRAM_CHAT_ID o TELEGRAM_BOT_TOKEN no configurados; no se notifica por Telegram.")
