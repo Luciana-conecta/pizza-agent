@@ -66,13 +66,17 @@ CLASSIFIER_PROMPT_TEMPLATE = """Clasificá el siguiente mensaje de un cliente de
 Mensaje: {request}
 
 Categorías:
-- menu_faq: Preguntas generales sobre el menú, precios, ingredientes, horarios, ubicación o delivery.
+- menu_faq: Preguntas generales sobre el menú, precios, ingredientes, horarios, ubicación o
+  delivery. También un saludo o charla casual sin pedido concreto (ej. "hola", "buenas",
+  "cómo andan") va acá, no en complaint_or_other.
 - take_order: El cliente quiere pedir algo, está agregando/quitando productos, o dando sus datos de entrega.
 - track_order: El cliente pregunta por el estado de un pedido que ya hizo.
-- complaint_or_other: Quejas, reclamos, problemas con un pedido, o cualquier cosa que no encaje arriba.{admin_category}
+- complaint_or_other: Quejas, reclamos o problemas reales con un pedido. No uses esta categoría
+  solo porque el mensaje es corto o ambiguo: un saludo sin más contexto no es una queja.{admin_category}
 
 Marcá can_automate=True solo si un agente automático puede resolver esto sin que un humano
-tenga que revisar el resultado después. Escalá (can_automate=False) cualquier enojo o queja
+tenga que revisar el resultado después. Un saludo o charla casual sin pedido concreto siempre
+es can_automate=True con confidence alta. Escalá (can_automate=False) cualquier enojo o queja
 seria, pedidos de reembolso, o cualquier cosa de la que no estés seguro.
 """
 
