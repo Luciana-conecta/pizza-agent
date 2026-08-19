@@ -88,15 +88,23 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         last_bot_message = existing_draft.last_bot_message if existing_draft else ""
 
         flow = PizzaAgentFlow()
-        await asyncio.to_thread(
-            flow.kickoff,
-            inputs={
-                "request": text,
-                "chat_id": chat_id,
-                "is_owner": is_owner,
-                "last_bot_message": last_bot_message,
-            },
-        )
+        try:
+            await asyncio.to_thread(
+                flow.kickoff,
+                inputs={
+                    "request": text,
+                    "chat_id": chat_id,
+                    "is_owner": is_owner,
+                    "last_bot_message": last_bot_message,
+                },
+            )
+        except Exception:
+            logger.exception("Error inesperado procesando el mensaje del chat %s", chat_id)
+            await update.message.reply_text(
+                "Uy, tuvimos un problema técnico respondiendo tu mensaje. Por favor, intentá "
+                "de nuevo en un momento."
+            )
+            return
 
         draft = session_store.get(chat_id)
         if draft is not None:
