@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from crewai import LLM, Agent
 from crewai.flow import Flow, listen, router, start
 
-from . import authorization
+from . import authorization, order_validation
 from .session_store import session_store
 from .tools.admin_tools import (
     ObtenerClientesFrecuentesTool,
@@ -45,9 +45,11 @@ def _nvidia_llm(model: str) -> LLM:
         custom_openai=True,
         # NVIDIA a veces deja un request colgado sin responder (no es un error, es
         # silencio). El cliente OpenAI reintenta solo, pero espera el timeout entero
-        # antes de reintentar — con 30s cada colgue costaba ~30s. Las llamadas que sí
-        # responden lo hacen en 2-10s, así que 15s da margen sin esperar de más.
-        timeout=15,
+        # antes de reintentar. Medido en prod (2026-08-20): ~40% de los intentos se
+        # cuelgan así, casi siempre resueltos por el reintento; las llamadas que sí
+        # responden lo hacen en 2-10s. 10s da margen de sobra sin alargar de más la
+        # espera cuando los 3 intentos se cuelgan (antes ~47s, ahora ~32s).
+        timeout=10,
     )
 
 
@@ -85,9 +87,10 @@ COMMON_AGENT_RULES = (
     "incluir los datos concretos que te devolvió esa herramienta (nombres, precios, montos, "
     "estados, etc.) — nunca digas que 'ahí va la información' sin ponerla de verdad. "
     "(2) Si el mensaje es un saludo o charla casual sin un pedido concreto (ej. 'hola', 'buenas'), "
-    "no uses ninguna herramienta: respondé directo con un saludo corto y amable que invite a "
-    "pedir, por ejemplo: '¡Hola! ¿En qué puedo ayudarte hoy?' o '¡Hola! Contame qué te gustaría "
-    "pedir.'"
+    "no uses ninguna herramienta: respondé con un saludo corto y amable, en tus propias "
+    "palabras, que invite a pedir. Esta regla es solo para saludos reales — un mensaje que ya "
+    "tiene contenido (un sabor, una pregunta, una confirmación) nunca se responde con un saludo "
+    "genérico, aunque no estés seguro de qué otra cosa decir."
 )
 
 ADMIN_CATEGORY_TEXT = """
@@ -112,16 +115,6 @@ class IntentClassification(BaseModel):
     )
     confidence: float = Field(description="Confianza en esta clasificación, de 0.0 a 1.0.")
     reasoning: str = Field(description="Justificación breve de la clasificación y la decisión de ruteo.")
-
-
-class OrderTurnOutput(BaseModel):
-    reply: str = Field(description="Mensaje para responderle al cliente en este turno de la conversación.")
-    ready_to_confirm: bool = Field(
-        description=(
-            "True solo si el pedido ya tiene al menos un producto y los datos de contacto y "
-            "entrega del cliente, y se le puede pedir que confirme el pedido."
-        )
-    )
 
 
 class RouterState(BaseModel):
@@ -225,19 +218,20 @@ class PizzaAgentFlow(Flow[RouterState]):
         prompt = f"{contexto}Mensaje del cliente: {self.state.request}"
 
         agent = self._order_agent()
-        result = agent.kickoff(prompt, response_format=OrderTurnOutput)
-        output: OrderTurnOutput = result.pydantic
+        result = agent.kickoff(prompt)
 
-        self.state.response = output.reply
-        self.state.last_bot_message = output.reply
+        self.state.response = result.raw
+        self.state.last_bot_message = result.raw
 
         draft = session_store.get(self.state.chat_id)
-        if output.ready_to_confirm and draft is not None and draft.items:
-            try:
-                draft.transition_to("awaiting_confirmation")
-                session_store.save(draft)
-            except ValueError as exc:
-                print(f"Transición de estado rechazada para chat {self.state.chat_id}: {exc}")
+        if draft is not None and draft.items:
+            listo, _ = order_validation.validar_draft_para_confirmar(draft)
+            if listo:
+                try:
+                    draft.transition_to("awaiting_confirmation")
+                    session_store.save(draft)
+                except ValueError as exc:
+                    print(f"Transición de estado rechazada para chat {self.state.chat_id}: {exc}")
 
     def _faq_agent(self) -> Agent:
         return Agent(

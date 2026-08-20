@@ -1,8 +1,8 @@
 """Validación determinista de un pedido antes de confirmarlo.
 
-`OrderTurnOutput.ready_to_confirm` (LLM, ver main.py) es solo la señal para
-mostrar los botones de confirmar. Esta validación es la que de verdad
-autoriza `db.crear_pedido`, siempre, sin importar lo que haya dicho el LLM.
+Se usa en dos momentos: en `main.py::_handle_take_order` para decidir si
+mostrar los botones de confirmar, y en `telegram_bot.py::on_confirm_or_cancel`
+como la autorización real antes de `db.crear_pedido`. El LLM nunca decide esto.
 """
 
 import re

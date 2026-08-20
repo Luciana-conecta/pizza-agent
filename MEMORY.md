@@ -116,3 +116,63 @@ disponible", el problema probablemente esté en la confiabilidad del tool-callin
 en el prompt — ahí valdría la pena evaluar otro modelo para el agente de pedidos.
 
 **Archivos**: `telegram_bot.py` (`/cancelar`), `main.py` (`_order_agent`).
+
+## 2026-08-20 — Latencia alta (continuación): timeout de 15s seguía siendo alto frente a la frecuencia real de colgues
+
+**Qué**: se bajó `timeout` de 15 a 10 segundos en `_nvidia_llm()` (`main.py`).
+
+**Por qué**: un cliente recibió el mensaje de fallback ("tuvimos un problema técnico") a mitad
+de un pedido ya en curso (con un ítem ya agregado al draft) — el catch-all de
+`telegram_bot.py::on_message` (agregado el 2026-08-19, ver entrada de esa fecha) funcionó como
+debía, pero tardó ~47s (3 intentos × 15s) antes de avisarle al cliente. Al revisar journalctl de
+esa ventana (~12 min, tráfico de prueba, no de un cliente real) se contaron ~17 llamadas
+exitosas a NVIDIA contra 9 reintentos — es decir, casi la mitad de los intentos individuales se
+cuelga en el primer intento, no es un evento raro. Casi todos esos cuelgues se resuelven solos
+con el reintento (una llamada necesitó 2 reintentos, no solo 1, antes de responder — por eso no
+se tocó `max_retries`, bajarlo arriesgaba convertir cuelgues recuperables en fallos totales).
+Bajar el timeout a 10s no reduce la frecuencia de los cuelgues (eso es 100% del lado de NVIDIA,
+ver entrada anterior), solo acorta el peor caso visible para el cliente de ~47s a ~32s cuando los
+3 intentos se cuelgan. Deliberadamente no se agregó notificación al dueño en este path (mismo
+razonamiento que la entrada del 2026-08-19 sobre el catch-all: un aviso por cada fallo podría
+espamear en una mala racha de NVIDIA) — queda pendiente si se quiere revisar con datos de
+tráfico real (no de prueba) de 30 días, no relevados en esta sesión.
+
+**Archivos**: `main.py` (`_nvidia_llm`).
+
+## 2026-08-20 — El Agente de Pedidos ignoraba el resultado de la tool y repetía un saludo fuera de contexto
+
+**Qué**: se sacó `response_format=OrderTurnOutput` de `_handle_take_order()` — ahora usa
+`result.raw` como respuesta, igual que los otros 3 agentes (`_faq_agent`, `_tracking_agent`,
+`_admin_agent`), que nunca forzaron un schema de salida. `ready_to_confirm` ya no lo decide el
+LLM: se eliminó la clase `OrderTurnOutput` y ahora `_handle_take_order()` llama directo a
+`order_validation.validar_draft_para_confirmar(draft)` para decidir si mostrar los botones de
+confirmar. También se sacó el ejemplo textual citado en `COMMON_AGENT_RULES` (regla 2, el saludo
+de ejemplo) y se agregó una frase explícita de que esa regla es solo para saludos reales.
+
+**Por qué**: en una sesión de prueba, el cliente pidió "qué sabores de pizza dispones" — la tool
+`consultar_menu` sí devolvió la lista completa (se ve en los logs), pero la respuesta final al
+cliente fue "¿Cuál de nuestras deliciosas pizzas te gustaría pedir?" repetida dos veces, sin la
+lista. Después, tras agregar exitosamente "Pizza Especial de la Casa" al draft
+(`agregar_item_al_pedido` funcionó, log lo confirma), la respuesta al cliente fue literalmente
+"¡Hola! ¿En qué puedo ayudarte hoy?" — el ejemplo textual citado en la regla (2) de
+`COMMON_AGENT_RULES` para saludos, repetido palabra por palabra en un turno que no era un
+saludo. Dos síntomas del mismo patrón ya anotado como "sigue abierto" en la entrada del
+2026-08-17 ("El bot alucinaba..."): con Llama 3.1 70b vía NVIDIA, combinar tool-calling nativo
+con `response_format` de crewAI en la misma llamada parece degradar la fidelidad de la
+respuesta final — el modelo ejecuta la tool bien pero al forzarlo a devolver JSON con un schema
+pierde de vista tanto el resultado de la tool como el contexto del turno, y cae en texto
+genérico (a veces literalmente el ejemplo citado en el prompt). Como los otros 3 agentes (sin
+`response_format`) no mostraron este síntoma en las mismas sesiones, se sacó el schema en vez de
+seguir ajustando el prompt. `ready_to_confirm` de todos modos nunca autorizaba el pedido de
+verdad (`order_validation.py` ya lo revalidaba todo antes de `db.crear_pedido`), así que
+quitarle esa decisión al LLM no cambia ninguna garantía de seguridad, solo la hace explícita
+también para decidir cuándo mostrar el botón.
+
+**Sigue abierto**: no se verificó en vivo si esto resuelve el problema de fondo (haría falta
+repetir la misma conversación de prueba tras el deploy). Si después de esto se repite el patrón
+de "la tool corrió bien pero la respuesta final no la usa" en cualquiera de los 4 agentes, ahí sí
+valdría la pena evaluar otro modelo para tool-calling, como ya sugería la entrada del
+2026-08-17.
+
+**Archivos**: `main.py` (`COMMON_AGENT_RULES`, `_handle_take_order`, se borró `OrderTurnOutput`),
+`order_validation.py` (docstring).
